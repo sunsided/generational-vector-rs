@@ -1,7 +1,13 @@
 [package]
 name = "generational_vector"
+description = "A vector type using generational indices"
+keywords = ["collections", "vector", "generational-index", "gamedev"]
+categories = ["memory-management", "rust-patterns", "game-development"]
+license = "MIT"
 version = "0.1.0"
 edition = "2021"
+repository = "https://github.com/sunsided/generational-vector-rs"
+authors = ["Markus Mayer"]
 
 [dependencies]
 num-traits = "0.2.14"
