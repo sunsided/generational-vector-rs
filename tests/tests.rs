@@ -32,6 +32,12 @@ fn insert() {
 }
 
 #[test]
+fn new_from_vec() {
+    let gv: GenerationalVector<_> = vec!["a", "b", "c"].into();
+    assert_eq!(gv.len(), 3);
+}
+
+#[test]
 fn remove() {
     let mut gv = GenerationalVector::default();
 

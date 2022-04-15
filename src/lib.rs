@@ -62,6 +62,21 @@ where
         }
     }
 
+    /// Initializes a new, empty vector.
+    pub fn new_from_vec(vec: Vec<TEntry>) -> Self {
+        let len = vec.len();
+        let mut data = Vec::with_capacity(len);
+        for entry in vec {
+            data.push(GenerationalEntry::new_from_value(entry, TGeneration::one()));
+        }
+
+        Self {
+            data,
+            free_list: Vec::new(),
+            len,
+        }
+    }
+
     /// Constructs a new, empty `Vec<T>` with the specified capacity.
     ///
     /// The vector will be able to hold exactly `capacity` elements without
@@ -335,6 +350,15 @@ where
     }
 }
 
+impl<TEntry, TGeneration> From<Vec<TEntry>> for GenerationalVector<TEntry, TGeneration>
+where
+    TGeneration: GenerationType,
+{
+    fn from(vec: Vec<TEntry>) -> Self {
+        Self::new_from_vec(vec)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -356,37 +380,6 @@ mod test {
         assert_eq!(a.index, d.index);
         assert!(a.generation < d.generation);
         assert_ne!(a, d);
-
-        // The vector still has three elements however.
-        assert_eq!(gv.len(), 3);
-        assert!(!gv.is_empty());
-
-        // No free slots.
-        assert_eq!(gv.count_num_free(), 0);
-
-        // The internal vector was expanded.
-        assert_eq!(gv.capacity(), 4);
-    }
-
-    #[test]
-    fn insert_after_delete_twice() {
-        let mut gv = GenerationalVector::default();
-
-        let a = gv.push("a");
-        let _ = gv.push("b");
-        let _ = gv.push("c");
-
-        gv.remove(&a);
-        let d = gv.push("d");
-
-        gv.remove(&d);
-        let e = gv.push("e");
-
-        // The index of element "a" was re-assigned to "e",
-        // however the generation was incremented twice.
-        assert_eq!(a.index, e.index);
-        assert!(a.generation < e.generation);
-        assert_ne!(a, e);
     }
 
     #[test]
@@ -408,10 +401,7 @@ mod test {
         assert_eq!(gv.free_list.len(), 3);
         assert_eq!(*gv.free_list.last().unwrap(), 2);
 
-        // Number of free elements is three, however
-        // the internal list capacity is still higher.
         assert_eq!(gv.count_num_free(), 3);
-        assert_eq!(gv.capacity(), 4);
     }
 
     #[test]
@@ -432,11 +422,7 @@ mod test {
         // The free head now points at the first element.
         assert_eq!(gv.free_list.len(), 3);
         assert_eq!(*gv.free_list.last().unwrap(), 0);
-
-        // Number of free elements is three, however
-        // the internal list capacity is still higher.
         assert_eq!(gv.count_num_free(), 3);
-        assert_eq!(gv.capacity(), 4);
     }
 
     #[test]
@@ -457,10 +443,6 @@ mod test {
         // The last deleted element is assigned first.
         assert_eq!(c.index, d.index);
         assert_eq!(b.index, e.index);
-        assert_eq!(gv.len(), 2);
-        assert!(!gv.is_empty());
-
-        assert_eq!(gv.count_num_free(), 1);
     }
 
     #[test]
