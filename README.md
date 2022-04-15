@@ -34,7 +34,17 @@ fn example() {
 }
 ```
 
-## Honorable Mentions
+You can find more usage examples in [tests/tests.rs](tests/tests.rs). 
+
+## Benchmarks
+
+This project uses Criterion for benchmarking. To execute the benchmarks, run
+
+```shell
+cargo criterion
+```
+
+## Material and sources
 
 - [RustConf 2018 - Closing Keynote - Using Rust For Game Development by Catherine West](https://www.youtube.com/watch?v=aKLntZcp27M)
 - [Generational indices guide](https://lucassardois.medium.com/generational-indices-guide-8e3c5f7fd594) by Lucas S.

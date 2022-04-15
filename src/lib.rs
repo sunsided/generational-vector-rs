@@ -6,6 +6,12 @@ use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::ops::Add;
 
+/// Alias for required traits on the type used for the generation value.
+pub trait GenerationType: One + Copy + Add<Output = Self> + PartialEq {}
+
+/// Automatic implementation of `GenerationType` for all matching types.
+impl<T> GenerationType for T where T: One + Copy + Add<Output = T> + PartialEq {}
+
 /// An index entry in the `GenerationalVector`.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct GenerationalIndex<TGeneration> {
@@ -24,7 +30,7 @@ struct GenerationalEntry<TEntry, TGeneration> {
 /// A vector that utilizes generational indexing to access the elements.
 pub struct GenerationalVector<TEntry, TGeneration = DefaultGenerationType>
 where
-    TGeneration: One + Copy + Add<Output = TGeneration>,
+    TGeneration: GenerationType,
 {
     data: Vec<GenerationalEntry<TEntry, TGeneration>>,
     free_list: Vec<usize>,
@@ -41,11 +47,53 @@ pub enum DeletionResult {
     InvalidGeneration,
 }
 
+impl<TEntry, TGeneration> IntoIterator for GenerationalVector<TEntry, TGeneration>
+where
+    TGeneration: GenerationType,
+{
+    type Item = TEntry;
+    type IntoIter = iterators::EntryIntoIterator<TEntry, TGeneration>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        iterators::EntryIntoIterator { vec: self.data }
+    }
+}
+
+impl<'a, TEntry, TGeneration> IntoIterator for &'a GenerationalVector<TEntry, TGeneration>
+where
+    TGeneration: GenerationType,
+{
+    type Item = &'a TEntry;
+    type IntoIter = iterators::EntryIterator<'a, TEntry, TGeneration>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        iterators::EntryIterator {
+            current: 0,
+            vec: &self.data,
+        }
+    }
+}
+
+impl<'a, TEntry, TGeneration> IntoIterator for &'a mut GenerationalVector<TEntry, TGeneration>
+where
+    TGeneration: GenerationType,
+{
+    type Item = &'a mut TEntry;
+    type IntoIter = iterators::EntryMutIterator<'a, TEntry, TGeneration>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        iterators::EntryMutIterator {
+            current: 0,
+            vec: &mut self.data,
+        }
+    }
+}
+
 /// A vector whose elements are addressed by both an index and an entry
 /// generation.
 impl<TEntry, TGeneration> GenerationalVector<TEntry, TGeneration>
 where
-    TGeneration: One + Add<Output = TGeneration> + Copy + Debug + PartialEq,
+    TGeneration: GenerationType,
 {
     /// Initializes a new, empty vector.
     pub fn new() -> Self {
@@ -53,6 +101,36 @@ where
             data: Vec::new(),
             free_list: Vec::new(),
             len: 0,
+        }
+    }
+
+    /// Initializes the vector from an existing vector.
+    pub fn new_from_vec(vec: Vec<TEntry>) -> Self {
+        let len = vec.len();
+        let mut data = Vec::with_capacity(len);
+        for entry in vec {
+            data.push(GenerationalEntry::new_from_value(entry, TGeneration::one()));
+        }
+
+        Self {
+            data,
+            free_list: Vec::new(),
+            len,
+        }
+    }
+
+    /// Initializes the vector from an iterator.
+    pub fn new_from_iter<TIter: IntoIterator<Item = TEntry>>(vec: TIter) -> Self {
+        let data: Vec<GenerationalEntry<TEntry, TGeneration>> = vec
+            .into_iter()
+            .map(|entry| GenerationalEntry::new_from_value(entry, TGeneration::one()))
+            .collect();
+        let len = data.len();
+
+        Self {
+            data,
+            free_list: Vec::new(),
+            len,
         }
     }
 
@@ -296,7 +374,7 @@ impl DeletionResult {
 
 impl<TEntry, TGeneration> GenerationalEntry<TEntry, TGeneration>
 where
-    TGeneration: One + Copy + Add<Output = TGeneration>,
+    TGeneration: GenerationType,
 {
     #[inline]
     fn new_from_value(value: TEntry, generation: TGeneration) -> Self {
@@ -329,65 +407,113 @@ where
     }
 }
 
+impl<TEntry, TGeneration> From<Vec<TEntry>> for GenerationalVector<TEntry, TGeneration>
+where
+    TGeneration: GenerationType,
+{
+    fn from(vec: Vec<TEntry>) -> Self {
+        Self::new_from_vec(vec)
+    }
+}
+
+/// Iterator implementations.
+pub mod iterators {
+    use super::*;
+
+    /// Iterator for owned values.
+    pub struct EntryIntoIterator<TEntry, TGeneration>
+    where
+        TGeneration: GenerationType,
+    {
+        pub(crate) vec: Vec<GenerationalEntry<TEntry, TGeneration>>,
+    }
+
+    /// Iterator for owned values.
+    pub struct EntryIterator<'a, TEntry, TGeneration>
+    where
+        TGeneration: GenerationType,
+    {
+        pub(crate) current: usize,
+        pub(crate) vec: &'a Vec<GenerationalEntry<TEntry, TGeneration>>,
+    }
+
+    pub struct EntryMutIterator<'a, TEntry, TGeneration>
+    where
+        TGeneration: GenerationType,
+    {
+        pub(crate) current: usize,
+        pub(crate) vec: &'a mut Vec<GenerationalEntry<TEntry, TGeneration>>,
+    }
+
+    impl<TEntry, TGeneration> Iterator for EntryIntoIterator<TEntry, TGeneration>
+    where
+        TGeneration: GenerationType,
+    {
+        type Item = TEntry;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            while !self.vec.is_empty() {
+                match self.vec.pop() {
+                    None => continue,
+                    Some(entry) => return entry.entry,
+                }
+            }
+
+            None
+        }
+    }
+
+    impl<'a, TEntry, TGeneration> Iterator for EntryIterator<'a, TEntry, TGeneration>
+    where
+        TGeneration: GenerationType,
+    {
+        type Item = &'a TEntry;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            while self.current < self.vec.len() {
+                let entry = &self.vec[self.current];
+                self.current += 1;
+                let entry = entry.entry.as_ref();
+                if entry.is_some() {
+                    return Some(entry.unwrap());
+                }
+            }
+
+            None
+        }
+    }
+
+    impl<'a, TEntry, TGeneration> Iterator for EntryMutIterator<'a, TEntry, TGeneration>
+    where
+        TGeneration: GenerationType,
+    {
+        type Item = &'a mut TEntry;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            let ptr = self.vec.as_mut_ptr();
+
+            while self.current < self.vec.len() {
+                let element = unsafe { &mut *ptr.add(self.current) };
+                let entry = element.entry.as_mut();
+                self.current += 1;
+
+                if entry.is_some() {
+                    return entry;
+                }
+            }
+
+            None
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use std::num::{NonZeroU8, NonZeroUsize};
 
     #[test]
-    fn default() {
-        let gv: GenerationalVector<&str> = Default::default();
-        assert_eq!(gv.len(), 0);
-        assert!(gv.is_empty());
-        assert_eq!(gv.count_num_free(), 0);
-    }
-
-    #[test]
-    fn new() {
-        let gv: GenerationalVector<&str> = GenerationalVector::new();
-        assert_eq!(gv.len(), 0);
-        assert!(gv.is_empty());
-        assert_eq!(gv.count_num_free(), 0);
-    }
-
-    #[test]
-    fn insert() {
-        let mut gv = GenerationalVector::default();
-
-        let a = gv.push("a");
-        let b = gv.push("b");
-        let c = gv.push("c");
-        assert_eq!(gv.get(&a), Some(&"a"));
-        assert_eq!(gv.get(&b), Some(&"b"));
-        assert_eq!(gv.get(&c), Some(&"c"));
-        assert_eq!(gv.len(), 3);
-        assert!(!gv.is_empty());
-        assert_eq!(gv.count_num_free(), 0);
-    }
-
-    #[test]
-    fn remove() {
-        let mut gv = GenerationalVector::default();
-
-        let a = gv.push("a");
-        let _ = gv.push("b");
-        let _ = gv.push("c");
-
-        gv.remove(&a);
-
-        assert_eq!(gv.get(&a), None);
-        assert_eq!(gv.len(), 2);
-        assert!(!gv.is_empty());
-
-        // Since one element was deleted, there is exactly one free slot.
-        assert_eq!(gv.count_num_free(), 1);
-
-        // The internal vector stays expanded.
-        assert_eq!(gv.capacity(), 4);
-    }
-
-    #[test]
-    fn insert_after_delete() {
+    fn insert_after_delete_generation_changes() {
         let mut gv = GenerationalVector::default();
 
         let a = gv.push("a");
@@ -402,41 +528,10 @@ mod test {
         assert_eq!(a.index, d.index);
         assert!(a.generation < d.generation);
         assert_ne!(a, d);
-
-        // The vector still has three elements however.
-        assert_eq!(gv.len(), 3);
-        assert!(!gv.is_empty());
-
-        // No free slots.
-        assert_eq!(gv.count_num_free(), 0);
-
-        // The internal vector was expanded.
-        assert_eq!(gv.capacity(), 4);
     }
 
     #[test]
-    fn insert_after_delete_twice() {
-        let mut gv = GenerationalVector::default();
-
-        let a = gv.push("a");
-        let _ = gv.push("b");
-        let _ = gv.push("c");
-
-        gv.remove(&a);
-        let d = gv.push("d");
-
-        gv.remove(&d);
-        let e = gv.push("e");
-
-        // The index of element "a" was re-assigned to "e",
-        // however the generation was incremented twice.
-        assert_eq!(a.index, e.index);
-        assert!(a.generation < e.generation);
-        assert_ne!(a, e);
-    }
-
-    #[test]
-    fn delete_all() {
+    fn delete_all_free_list_updates() {
         let mut gv = GenerationalVector::default();
 
         let a = gv.push("a");
@@ -454,14 +549,11 @@ mod test {
         assert_eq!(gv.free_list.len(), 3);
         assert_eq!(*gv.free_list.last().unwrap(), 2);
 
-        // Number of free elements is three, however
-        // the internal list capacity is still higher.
         assert_eq!(gv.count_num_free(), 3);
-        assert_eq!(gv.capacity(), 4);
     }
 
     #[test]
-    fn delete_all_reverse() {
+    fn delete_all_reverse_free_list_changes() {
         let mut gv = GenerationalVector::default();
 
         let a = gv.push("a");
@@ -478,15 +570,11 @@ mod test {
         // The free head now points at the first element.
         assert_eq!(gv.free_list.len(), 3);
         assert_eq!(*gv.free_list.last().unwrap(), 0);
-
-        // Number of free elements is three, however
-        // the internal list capacity is still higher.
         assert_eq!(gv.count_num_free(), 3);
-        assert_eq!(gv.capacity(), 4);
     }
 
     #[test]
-    fn delete_all_and_insert() {
+    fn delete_all_and_insert_indexes_are_set_in_order() {
         let mut gv = GenerationalVector::default();
 
         let a = gv.push("a");
@@ -503,10 +591,6 @@ mod test {
         // The last deleted element is assigned first.
         assert_eq!(c.index, d.index);
         assert_eq!(b.index, e.index);
-        assert_eq!(gv.len(), 2);
-        assert!(!gv.is_empty());
-
-        assert_eq!(gv.count_num_free(), 1);
     }
 
     #[test]
