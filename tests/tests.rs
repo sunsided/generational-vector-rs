@@ -55,6 +55,34 @@ fn into_iter() {
 }
 
 #[test]
+fn iter() {
+    let gv: GenerationalVector<_> = vec![10, 20, 30, 40, 50].into();
+    let vec: Vec<_> = gv
+        .iter()
+        .filter(|&x| *x > 20 && *x < 50)
+        .map(|x| x * 2)
+        .collect();
+    assert_eq!(vec.len(), 2);
+    assert!(vec.contains(&60));
+    assert!(vec.contains(&80));
+}
+
+#[test]
+fn iter_mut() {
+    let mut gv: GenerationalVector<_> = vec![20, 30, 40, 50].into();
+    for value in gv.iter_mut().filter(|&&mut x| x > 20 && x < 50) {
+        *value *= 2;
+    }
+
+    let vec: Vec<_> = gv.into_iter().collect();
+    assert_eq!(vec.len(), 4);
+    assert!(vec.contains(&20));
+    assert!(vec.contains(&60));
+    assert!(vec.contains(&80));
+    assert!(vec.contains(&50));
+}
+
+#[test]
 fn for_loop() {
     let gv: GenerationalVector<_> = vec!["a", "b", "c"].into();
 

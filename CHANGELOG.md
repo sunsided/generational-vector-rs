@@ -11,6 +11,7 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Added `GenerationalVector::<T>::new_from_iter()` to construct from
   arbitrary `IntoIterator<Item = T>` types.
 - Added `IntoIter` implementations for `GenerationalVector<T>`, `&GenerationalVector<T>` and `&mut GenerationalVector<T>`.
+- Added `iter()` and `iter_mut()` functions.
 
 ## 0.1.0 - 2022-04-15
 
