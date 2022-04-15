@@ -341,59 +341,7 @@ mod test {
     use std::num::{NonZeroU8, NonZeroUsize};
 
     #[test]
-    fn default() {
-        let gv: GenerationalVector<&str> = Default::default();
-        assert_eq!(gv.len(), 0);
-        assert!(gv.is_empty());
-        assert_eq!(gv.count_num_free(), 0);
-    }
-
-    #[test]
-    fn new() {
-        let gv: GenerationalVector<&str> = GenerationalVector::new();
-        assert_eq!(gv.len(), 0);
-        assert!(gv.is_empty());
-        assert_eq!(gv.count_num_free(), 0);
-    }
-
-    #[test]
-    fn insert() {
-        let mut gv = GenerationalVector::default();
-
-        let a = gv.push("a");
-        let b = gv.push("b");
-        let c = gv.push("c");
-        assert_eq!(gv.get(&a), Some(&"a"));
-        assert_eq!(gv.get(&b), Some(&"b"));
-        assert_eq!(gv.get(&c), Some(&"c"));
-        assert_eq!(gv.len(), 3);
-        assert!(!gv.is_empty());
-        assert_eq!(gv.count_num_free(), 0);
-    }
-
-    #[test]
-    fn remove() {
-        let mut gv = GenerationalVector::default();
-
-        let a = gv.push("a");
-        let _ = gv.push("b");
-        let _ = gv.push("c");
-
-        gv.remove(&a);
-
-        assert_eq!(gv.get(&a), None);
-        assert_eq!(gv.len(), 2);
-        assert!(!gv.is_empty());
-
-        // Since one element was deleted, there is exactly one free slot.
-        assert_eq!(gv.count_num_free(), 1);
-
-        // The internal vector stays expanded.
-        assert_eq!(gv.capacity(), 4);
-    }
-
-    #[test]
-    fn insert_after_delete() {
+    fn insert_after_delete_generation_changes() {
         let mut gv = GenerationalVector::default();
 
         let a = gv.push("a");
@@ -442,7 +390,7 @@ mod test {
     }
 
     #[test]
-    fn delete_all() {
+    fn delete_all_free_list_updates() {
         let mut gv = GenerationalVector::default();
 
         let a = gv.push("a");
@@ -467,7 +415,7 @@ mod test {
     }
 
     #[test]
-    fn delete_all_reverse() {
+    fn delete_all_reverse_free_list_changes() {
         let mut gv = GenerationalVector::default();
 
         let a = gv.push("a");
@@ -492,7 +440,7 @@ mod test {
     }
 
     #[test]
-    fn delete_all_and_insert() {
+    fn delete_all_and_insert_indexes_are_set_in_order() {
         let mut gv = GenerationalVector::default();
 
         let a = gv.push("a");
