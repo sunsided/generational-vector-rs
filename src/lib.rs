@@ -6,6 +6,12 @@ use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::ops::Add;
 
+/// Alias for required traits on the type used for the generation value.
+pub trait GenerationType: One + Copy + Add<Output = Self> + PartialEq {}
+
+/// Automatic implementation of `GenerationType` for all matching types.
+impl<T> GenerationType for T where T: One + Copy + Add<Output = T> + PartialEq {}
+
 /// An index entry in the `GenerationalVector`.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct GenerationalIndex<TGeneration> {
@@ -24,7 +30,7 @@ struct GenerationalEntry<TEntry, TGeneration> {
 /// A vector that utilizes generational indexing to access the elements.
 pub struct GenerationalVector<TEntry, TGeneration = DefaultGenerationType>
 where
-    TGeneration: One + Copy + Add<Output = TGeneration>,
+    TGeneration: GenerationType,
 {
     data: Vec<GenerationalEntry<TEntry, TGeneration>>,
     free_list: Vec<usize>,
@@ -45,7 +51,7 @@ pub enum DeletionResult {
 /// generation.
 impl<TEntry, TGeneration> GenerationalVector<TEntry, TGeneration>
 where
-    TGeneration: One + Add<Output = TGeneration> + Copy + Debug + PartialEq,
+    TGeneration: GenerationType,
 {
     /// Initializes a new, empty vector.
     pub fn new() -> Self {
@@ -296,7 +302,7 @@ impl DeletionResult {
 
 impl<TEntry, TGeneration> GenerationalEntry<TEntry, TGeneration>
 where
-    TGeneration: One + Copy + Add<Output = TGeneration>,
+    TGeneration: GenerationType,
 {
     #[inline]
     fn new_from_value(value: TEntry, generation: TGeneration) -> Self {
