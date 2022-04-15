@@ -38,6 +38,68 @@ fn new_from_vec() {
 }
 
 #[test]
+fn into_iter() {
+    let gv: GenerationalVector<_> = vec!["a", "b", "c"].into();
+    let vec: Vec<_> = gv.into_iter().collect();
+    assert_eq!(vec.len(), 3);
+    assert!(vec.contains(&"a"));
+    assert!(vec.contains(&"b"));
+    assert!(vec.contains(&"c"));
+}
+
+#[test]
+fn for_loop() {
+    let gv: GenerationalVector<_> = vec!["a", "b", "c"].into();
+
+    let mut vec = Vec::default();
+    for entry in gv {
+        vec.push(entry);
+    }
+
+    assert_eq!(vec.len(), 3);
+    assert!(vec.contains(&"a"));
+    assert!(vec.contains(&"b"));
+    assert!(vec.contains(&"c"));
+}
+
+#[test]
+fn for_loop_with_ref() {
+    let gv: GenerationalVector<_> = vec!["a", "b", "c"].into();
+    let gv_ref = &gv;
+
+    let mut vec = Vec::default();
+    for &entry in gv_ref.into_iter() {
+        vec.push(entry);
+    }
+
+    assert_eq!(vec.len(), 3);
+    assert!(vec.contains(&"a"));
+    assert!(vec.contains(&"b"));
+    assert!(vec.contains(&"c"));
+}
+
+#[test]
+fn for_loop_with_mut_ref() {
+    let mut gv: GenerationalVector<_> = vec![10, 20, 30].into();
+    let gv_ref = &mut gv;
+
+    let mut vec = Vec::default();
+    for entry in gv_ref.into_iter() {
+        *entry = *entry + 1;
+    }
+
+    let gv_ref = &gv;
+    for &entry in gv_ref.into_iter() {
+        vec.push(entry);
+    }
+
+    assert_eq!(vec.len(), 3);
+    assert!(vec.contains(&11));
+    assert!(vec.contains(&21));
+    assert!(vec.contains(&31));
+}
+
+#[test]
 fn remove() {
     let mut gv = GenerationalVector::default();
 
