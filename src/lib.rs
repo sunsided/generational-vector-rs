@@ -118,7 +118,7 @@ where
         self.data.capacity()
     }
 
-    pub fn insert(&mut self, value: TEntry) -> GenerationalIndex<TGeneration> {
+    pub fn push(&mut self, value: TEntry) -> GenerationalIndex<TGeneration> {
         let key = match self.data.get_mut(self.free_head) {
             Some(GenerationalEntry { entry, generation }) => {
                 // Update existing entry.
@@ -213,9 +213,9 @@ mod test {
     fn insert() {
         let mut gv = GenerationalVector::default();
 
-        let a = gv.insert("a");
-        let b = gv.insert("b");
-        let c = gv.insert("c");
+        let a = gv.push("a");
+        let b = gv.push("b");
+        let c = gv.push("c");
         assert_eq!(gv.get(&a), Some(&"a"));
         assert_eq!(gv.get(&b), Some(&"b"));
         assert_eq!(gv.get(&c), Some(&"c"));
@@ -228,9 +228,9 @@ mod test {
     fn remove() {
         let mut gv = GenerationalVector::default();
 
-        let a = gv.insert("a");
-        let _ = gv.insert("b");
-        let _ = gv.insert("c");
+        let a = gv.push("a");
+        let _ = gv.push("b");
+        let _ = gv.push("c");
 
         gv.remove(&a);
 
@@ -249,12 +249,12 @@ mod test {
     fn insert_after_delete() {
         let mut gv = GenerationalVector::default();
 
-        let a = gv.insert("a");
-        let _ = gv.insert("b");
-        let _ = gv.insert("c");
+        let a = gv.push("a");
+        let _ = gv.push("b");
+        let _ = gv.push("c");
 
         gv.remove(&a);
-        let d = gv.insert("d");
+        let d = gv.push("d");
 
         // The index of element "a" was re-assigned to "d",
         // however the generation differs.
@@ -277,15 +277,15 @@ mod test {
     fn insert_after_delete_twice() {
         let mut gv = GenerationalVector::default();
 
-        let a = gv.insert("a");
-        let _ = gv.insert("b");
-        let _ = gv.insert("c");
+        let a = gv.push("a");
+        let _ = gv.push("b");
+        let _ = gv.push("c");
 
         gv.remove(&a);
-        let d = gv.insert("d");
+        let d = gv.push("d");
 
         gv.remove(&d);
-        let e = gv.insert("e");
+        let e = gv.push("e");
 
         // The index of element "a" was re-assigned to "e",
         // however the generation was incremented twice.
@@ -298,9 +298,9 @@ mod test {
     fn delete_all() {
         let mut gv = GenerationalVector::default();
 
-        let a = gv.insert("a");
-        let b = gv.insert("b");
-        let c = gv.insert("c");
+        let a = gv.push("a");
+        let b = gv.push("b");
+        let c = gv.push("c");
 
         gv.remove(&a);
         gv.remove(&b);
@@ -322,9 +322,9 @@ mod test {
     fn delete_all_reverse() {
         let mut gv = GenerationalVector::default();
 
-        let a = gv.insert("a");
-        let b = gv.insert("b");
-        let c = gv.insert("c");
+        let a = gv.push("a");
+        let b = gv.push("b");
+        let c = gv.push("c");
 
         gv.remove(&c);
         gv.remove(&b);
@@ -346,16 +346,16 @@ mod test {
     fn delete_all_and_insert() {
         let mut gv = GenerationalVector::default();
 
-        let a = gv.insert("a");
-        let b = gv.insert("b");
-        let c = gv.insert("c");
+        let a = gv.push("a");
+        let b = gv.push("b");
+        let c = gv.push("c");
 
         gv.remove(&a);
         gv.remove(&b);
         gv.remove(&c);
 
-        let d = gv.insert("d");
-        let e = gv.insert("e");
+        let d = gv.push("d");
+        let e = gv.push("e");
 
         // The last deleted element is assigned first.
         assert_eq!(c.index, d.index);

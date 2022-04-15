@@ -5,3 +5,10 @@ edition = "2021"
 
 [dependencies]
 num-traits = "0.2.14"
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "lib_benchmark"
+harness = false
