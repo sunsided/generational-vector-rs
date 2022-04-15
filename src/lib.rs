@@ -1,4 +1,5 @@
 use num_traits::int::PrimInt;
+use std::borrow::Borrow;
 
 /// An index entry in the `GenerationalVector`.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -18,7 +19,7 @@ enum Slot<TEntry> {
 /// An index entry
 #[derive(Debug)]
 struct GenerationalEntry<TEntry, TGeneration> {
-    generation: TGeneration, // TODO: Make non-zero
+    generation: TGeneration, // TODO: Make non-zero for optimizations?
     entry: Slot<TEntry>,
 }
 
@@ -48,8 +49,39 @@ impl<TEntry, TGeneration> GenerationalEntry<TEntry, TGeneration>
 where
     TGeneration: PrimInt,
 {
-    fn new(entry: Slot<TEntry>, generation: TGeneration) -> Self {
-        Self { entry, generation }
+    #[inline]
+    fn new_from_value(value: TEntry, generation: TGeneration) -> Self {
+        Self {
+            entry: Slot::Occupied(value),
+            generation,
+        }
+    }
+
+    /// Replaces the content of an empty slot with a new value.
+    ///
+    /// ## Panics
+    /// Will panic if the slot is already occupied.
+    ///
+    /// ## Arguments
+    /// * `value` - The new value.
+    /// * `free_head` - A mutable reference to the free head pointer of the vector.
+    ///   This value will be overwritten.
+    ///
+    /// ## Returns
+    /// The index pointing to the new element.
+    pub fn reuse(
+        &mut self,
+        value: TEntry,
+        free_head: &mut usize,
+    ) -> GenerationalIndex<TGeneration> {
+        if let Slot::Free { next_free } = self.entry {
+            let key = GenerationalIndex::new(*free_head, self.generation);
+            self.entry = Slot::Occupied(value);
+            *free_head = next_free;
+            return key;
+        }
+
+        panic!("free list is corrupted");
     }
 }
 
@@ -74,10 +106,13 @@ impl DeletionResult {
     }
 }
 
+/// A vector whose elements are addressed by both an index and an entry
+/// generation.
 impl<TEntry, TGeneration> GenerationalVector<TEntry, TGeneration>
 where
     TGeneration: PrimInt,
 {
+    /// Initializes a new, empty vector.
     pub fn new() -> Self {
         Self {
             data: Vec::new(),
@@ -86,17 +121,71 @@ where
         }
     }
 
+    /// Constructs a new, empty `Vec<T>` with the specified capacity.
+    ///
+    /// The vector will be able to hold exactly `capacity` elements without
+    /// reallocating. If `capacity` is 0, the vector will not allocate.
+    ///
+    /// It is important to note that although the returned vector has the
+    /// *capacity* specified, the vector will have a zero *length*.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            data: Vec::with_capacity(capacity),
+            free_head: 0,
+            len: 0,
+        }
+    }
+
+    /// Returns the number of elements in the vector, also referred to
+    /// as its 'length'.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut v = generational_vector::GenerationalVector::default();
+    /// let _a = v.push("a");
+    /// let _b = v.push("b");
+    /// let _c = v.push("c");
+    /// assert_eq!(v.len(), 3);
+    /// ```
     #[inline]
     pub fn len(&self) -> usize {
         self.len
     }
 
+    /// Returns `true` if the vector contains no elements.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut v = generational_vector::GenerationalVector::default();
+    /// assert!(v.is_empty());
+    ///
+    /// v.push("a");
+    /// assert!(!v.is_empty());
+    /// ```
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
 
     /// Walks the list to determine the number of free elements.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let mut v = generational_vector::GenerationalVector::default();
+    ///
+    /// let _a = v.push("a");
+    /// let _b = v.push("b");
+    /// let _c = v.push("c");
+    ///
+    /// v.remove(&_a);
+    /// v.remove(&_b);
+    ///
+    /// assert_eq!(v.len(), 1);
+    /// assert_eq!(v.count_num_free(), 2);
+    /// ```
     ///
     /// ## Returns
     /// The number of empty slots.
@@ -114,48 +203,96 @@ where
         free_count
     }
 
+    /// Returns the number of elements the vector can hold without
+    /// reallocating.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use generational_vector::GenerationalVector;
+    /// let vec: GenerationalVector<i32> = GenerationalVector::with_capacity(10);
+    /// assert_eq!(vec.capacity(), 10);
+    /// ```
     pub fn capacity(&self) -> usize {
         self.data.capacity()
     }
 
+    /// Inserts an element into the vector. This method will prefer
+    /// replacing empty slots over growing the underlying array.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use generational_vector::{GenerationalVector, DeletionResult};
+    ///
+    /// let mut v = GenerationalVector::default();
+    ///
+    /// let a = v.push("a");
+    /// let b = v.push("b");
+    /// assert_eq!(v.len(), 2);
+    /// ```
     pub fn push(&mut self, value: TEntry) -> GenerationalIndex<TGeneration> {
-        let key = match self.data.get_mut(self.free_head) {
-            Some(GenerationalEntry { entry, generation }) => {
-                // Update existing entry.
-                match entry {
-                    Slot::Free { next_free } => {
-                        let key = GenerationalIndex::new(self.free_head, *generation);
-                        self.free_head = *next_free; // TODO: ensure this one never points to a used element after deletion!
-                        *entry = Slot::Occupied(value);
-                        key
-                    }
-                    _ => {
-                        // We have found an occupied entry.
-                        panic!("corrupt free list");
-                    }
-                }
-            }
-            None => {
-                // Insert to the end.
-                let generation = TGeneration::zero();
-                let key = GenerationalIndex::new(self.data.len(), generation);
-                let entry = Slot::Occupied(value);
-                let gen_entry = GenerationalEntry::new(entry, generation);
-                self.data.push(gen_entry);
-                self.free_head = key.index + 1;
-                key
-            }
+        let index = match self.data.get_mut(self.free_head) {
+            None => self.insert_tail(value),
+            Some(entry) => entry.reuse(value, &mut self.free_head),
         };
 
         self.len += 1;
-        key
+        index
     }
 
-    pub fn get(&self, key: &GenerationalIndex<TGeneration>) -> Option<&TEntry> {
-        let GenerationalEntry { entry, generation } = &self.data[key.index];
+    /// Inserts at the end of the vector.
+    fn insert_tail(&mut self, value: TEntry) -> GenerationalIndex<TGeneration> {
+        let generation = TGeneration::zero();
+        let index = GenerationalIndex::new(self.data.len(), generation);
+        let gen_entry = GenerationalEntry::new_from_value(value, generation);
+        self.data.push(gen_entry);
+        self.free_head = index.index + 1;
+        index
+    }
 
-        if let Slot::Occupied(value) = entry {
-            if *generation == key.generation {
+    /// Retrieves the element at the specified index.
+    ///
+    /// ## Arguments
+    /// * `index` - The index of the element.
+    ///
+    /// ## Returns
+    /// `None` if the element does not exist; `Some` element otherwise.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use generational_vector::{GenerationalVector, DeletionResult};
+    ///
+    /// let mut v = GenerationalVector::default();
+    /// let a = v.push("a");
+    /// let b = v.push("b");
+    ///
+    /// assert_eq!(v.get(&a).unwrap(), &"a");
+    /// assert_eq!(v.get(&b).unwrap(), &"b");
+    ///
+    /// v.remove(&b);
+    /// assert_eq!(v.get(&b), None);
+    ///
+    /// let c = v.push("c");
+    /// assert_eq!(v.get(&b), None);
+    /// assert_eq!(v.get(&c).unwrap(), &"c");
+    /// ```
+    pub fn get<Index>(&self, index: Index) -> Option<&TEntry>
+    where
+        Index: Borrow<GenerationalIndex<TGeneration>>,
+    {
+        let index = index.borrow();
+
+        // Apply boundary check for the index.
+        let entry = self.data.get(index.index);
+        if entry.is_none() {
+            return None;
+        }
+
+        let entry = entry.unwrap();
+        if let Slot::Occupied(value) = &entry.entry {
+            if entry.generation == index.generation {
                 return Some(value);
             }
         }
@@ -163,12 +300,33 @@ where
         None
     }
 
-    pub fn remove(&mut self, key: &GenerationalIndex<TGeneration>) -> DeletionResult {
-        let GenerationalEntry { entry, generation } = &mut self.data[key.index];
+    /// Removes an element from the vector.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use generational_vector::{GenerationalVector, DeletionResult};
+    ///
+    /// let mut v = GenerationalVector::default();
+    ///
+    /// let a = v.push("a");
+    /// let b = v.push("b");
+    ///
+    /// assert_eq!(v.remove(&a), DeletionResult::Ok);
+    /// assert_eq!(v.remove(&b), DeletionResult::Ok);
+    /// assert_eq!(v.remove(&b), DeletionResult::NotFound);
+    /// assert_eq!(v.len(), 0);
+    ///
+    /// let c = v.push("c");
+    /// assert_eq!(v.remove(&b), DeletionResult::InvalidGeneration);
+    /// assert_eq!(v.len(), 1);
+    /// ```
+    pub fn remove(&mut self, index: &GenerationalIndex<TGeneration>) -> DeletionResult {
+        let GenerationalEntry { entry, generation } = &mut self.data[index.index];
 
         return match entry {
             Slot::Occupied { .. } => {
-                if *generation != key.generation {
+                if *generation != index.generation {
                     return DeletionResult::InvalidGeneration;
                 }
 
@@ -176,15 +334,11 @@ where
                 *entry = Slot::Free {
                     next_free: self.free_head,
                 };
-                self.free_head = key.index;
-                self.len = self.len - 1;
+                self.free_head = index.index;
+                self.len -= 1;
                 DeletionResult::Ok
             }
-            _ => {
-                // If we get there it mean's that the user is trying to remove an already
-                // removed key, just do nothing.
-                DeletionResult::NotFound
-            }
+            _ => DeletionResult::NotFound,
         };
     }
 }
