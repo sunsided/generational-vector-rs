@@ -38,48 +38,6 @@ pub enum DeletionResult {
     InvalidGeneration,
 }
 
-impl<TEntry, TGeneration> IntoIterator for GenerationalVector<TEntry, TGeneration>
-where
-    TGeneration: GenerationType,
-{
-    type Item = TEntry;
-    type IntoIter = EntryIntoIterator<TEntry, TGeneration>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        EntryIntoIterator { vec: self.data }
-    }
-}
-
-impl<'a, TEntry, TGeneration> IntoIterator for &'a GenerationalVector<TEntry, TGeneration>
-where
-    TGeneration: GenerationType,
-{
-    type Item = &'a TEntry;
-    type IntoIter = EntryIterator<'a, TEntry, TGeneration>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        EntryIterator {
-            current: 0,
-            vec: &self.data,
-        }
-    }
-}
-
-impl<'a, TEntry, TGeneration> IntoIterator for &'a mut GenerationalVector<TEntry, TGeneration>
-where
-    TGeneration: GenerationType,
-{
-    type Item = &'a mut TEntry;
-    type IntoIter = EntryMutIterator<'a, TEntry, TGeneration>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        EntryMutIterator {
-            current: 0,
-            vec: &mut self.data,
-        }
-    }
-}
-
 /// A vector whose elements are addressed by both an index and an entry
 /// generation.
 impl<TEntry, TGeneration> GenerationalVector<TEntry, TGeneration>
@@ -365,6 +323,49 @@ where
             _ => DeletionResult::NotFound,
         };
     }
+
+    /// Produces an immutable enumerator.
+    ///
+    /// ## Examples
+    /// ```
+    /// use generational_vector::GenerationalVector;
+    ///
+    /// let gv: GenerationalVector<_> = vec![20, 30, 40, 50].into();
+    /// let vec: Vec<_> = gv
+    ///     .iter()
+    ///     .filter(|&x| *x > 20 && *x < 50)
+    ///     .map(|x| x * 2)
+    ///     .collect();
+    ///
+    /// assert_eq!(vec.len(), 2);
+    /// assert!(vec.contains(&60));
+    /// assert!(vec.contains(&80));
+    ///```
+    pub fn iter(&self) -> EntryIterator<TEntry, TGeneration> {
+        self.into_iter()
+    }
+
+    /// Produces a mutable enumerator.
+    ///
+    /// ## Examples
+    /// ```
+    /// use generational_vector::GenerationalVector;
+    ///
+    /// let mut gv: GenerationalVector<_> = vec![20, 30, 40, 50].into();
+    /// for value in gv.iter_mut().filter(|&&mut x| x > 20 && x < 50) {
+    ///     *value *= 2;
+    /// }
+    ///
+    /// let vec: Vec<_> = gv.into_iter().collect();
+    /// assert_eq!(vec.len(), 4);
+    /// assert!(vec.contains(&20));
+    /// assert!(vec.contains(&60));
+    /// assert!(vec.contains(&80));
+    /// assert!(vec.contains(&50));
+    ///```
+    pub fn iter_mut(&mut self) -> EntryMutIterator<TEntry, TGeneration> {
+        self.into_iter()
+    }
 }
 
 impl<TEntry> Default for GenerationalVector<TEntry, DefaultGenerationType> {
@@ -431,6 +432,48 @@ where
 {
     fn from(vec: Vec<TEntry>) -> Self {
         Self::new_from_vec(vec)
+    }
+}
+
+impl<TEntry, TGeneration> IntoIterator for GenerationalVector<TEntry, TGeneration>
+where
+    TGeneration: GenerationType,
+{
+    type Item = TEntry;
+    type IntoIter = EntryIntoIterator<TEntry, TGeneration>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        EntryIntoIterator { vec: self.data }
+    }
+}
+
+impl<'a, TEntry, TGeneration> IntoIterator for &'a GenerationalVector<TEntry, TGeneration>
+where
+    TGeneration: GenerationType,
+{
+    type Item = &'a TEntry;
+    type IntoIter = EntryIterator<'a, TEntry, TGeneration>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        EntryIterator {
+            current: 0,
+            vec: &self.data,
+        }
+    }
+}
+
+impl<'a, TEntry, TGeneration> IntoIterator for &'a mut GenerationalVector<TEntry, TGeneration>
+where
+    TGeneration: GenerationType,
+{
+    type Item = &'a mut TEntry;
+    type IntoIter = EntryMutIterator<'a, TEntry, TGeneration>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        EntryMutIterator {
+            current: 0,
+            vec: &mut self.data,
+        }
     }
 }
 

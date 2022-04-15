@@ -19,3 +19,7 @@ criterion = "0.3"
 [[bench]]
 name = "lib_benchmark"
 harness = false
+
+[[example]]
+name = "example"
+path = "examples/example.rs"
