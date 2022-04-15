@@ -104,13 +104,28 @@ where
         }
     }
 
-    /// Initializes a new, empty vector.
+    /// Initializes the vector from an existing vector.
     pub fn new_from_vec(vec: Vec<TEntry>) -> Self {
         let len = vec.len();
         let mut data = Vec::with_capacity(len);
         for entry in vec {
             data.push(GenerationalEntry::new_from_value(entry, TGeneration::one()));
         }
+
+        Self {
+            data,
+            free_list: Vec::new(),
+            len,
+        }
+    }
+
+    /// Initializes the vector from an iterator.
+    pub fn new_from_iter<TIter: IntoIterator<Item = TEntry>>(vec: TIter) -> Self {
+        let data: Vec<GenerationalEntry<TEntry, TGeneration>> = vec
+            .into_iter()
+            .map(|entry| GenerationalEntry::new_from_value(entry, TGeneration::one()))
+            .collect();
+        let len = data.len();
 
         Self {
             data,

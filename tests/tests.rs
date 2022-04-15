@@ -38,6 +38,13 @@ fn new_from_vec() {
 }
 
 #[test]
+fn new_from_iter() {
+    let vec = ["a", "b", "c"];
+    let gv: GenerationalVector<_> = GenerationalVector::new_from_iter(vec);
+    assert_eq!(gv.len(), 3);
+}
+
+#[test]
 fn into_iter() {
     let gv: GenerationalVector<_> = vec!["a", "b", "c"].into();
     let vec: Vec<_> = gv.into_iter().collect();
