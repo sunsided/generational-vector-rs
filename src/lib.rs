@@ -1,5 +1,10 @@
-use num_traits::int::PrimInt;
+mod default_generation_type;
+
+use crate::default_generation_type::DefaultGenerationType;
+use num_traits::One;
 use std::borrow::Borrow;
+use std::fmt::Debug;
+use std::ops::Add;
 
 /// An index entry in the `GenerationalVector`.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -8,81 +13,22 @@ pub struct GenerationalIndex<TGeneration> {
     generation: TGeneration,
 }
 
-/// An entry slot encoding whether the list index
-/// is free to be reused or occupied by a value.
-#[derive(Debug)]
-enum Slot<TEntry> {
-    Free { next_free: usize },
-    Occupied(TEntry),
-}
-
 /// An index entry
 #[derive(Debug)]
 struct GenerationalEntry<TEntry, TGeneration> {
-    generation: TGeneration, // TODO: Make non-zero for optimizations?
-    entry: Slot<TEntry>,
+    /// The generation of the entry. A value of zero always encodes an empty value.
+    generation: TGeneration,
+    entry: Option<TEntry>,
 }
 
 /// A vector that utilizes generational indexing to access the elements.
-pub struct GenerationalVector<TEntry, TGeneration = usize>
+pub struct GenerationalVector<TEntry, TGeneration = DefaultGenerationType>
 where
-    TGeneration: PrimInt,
+    TGeneration: One + Copy + Add<Output = TGeneration>,
 {
     data: Vec<GenerationalEntry<TEntry, TGeneration>>,
-    free_head: usize,
+    free_list: Vec<usize>,
     len: usize,
-}
-
-impl<TEntry> Default for GenerationalVector<TEntry, usize> {
-    fn default() -> Self {
-        GenerationalVector::<TEntry, usize>::new()
-    }
-}
-
-impl<TGeneration> GenerationalIndex<TGeneration> {
-    fn new(index: usize, generation: TGeneration) -> Self {
-        Self { index, generation }
-    }
-}
-
-impl<TEntry, TGeneration> GenerationalEntry<TEntry, TGeneration>
-where
-    TGeneration: PrimInt,
-{
-    #[inline]
-    fn new_from_value(value: TEntry, generation: TGeneration) -> Self {
-        Self {
-            entry: Slot::Occupied(value),
-            generation,
-        }
-    }
-
-    /// Replaces the content of an empty slot with a new value.
-    ///
-    /// ## Panics
-    /// Will panic if the slot is already occupied.
-    ///
-    /// ## Arguments
-    /// * `value` - The new value.
-    /// * `free_head` - A mutable reference to the free head pointer of the vector.
-    ///   This value will be overwritten.
-    ///
-    /// ## Returns
-    /// The index pointing to the new element.
-    pub fn reuse(
-        &mut self,
-        value: TEntry,
-        free_head: &mut usize,
-    ) -> GenerationalIndex<TGeneration> {
-        if let Slot::Free { next_free } = self.entry {
-            let key = GenerationalIndex::new(*free_head, self.generation);
-            self.entry = Slot::Occupied(value);
-            *free_head = next_free;
-            return key;
-        }
-
-        panic!("free list is corrupted");
-    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
@@ -95,28 +41,17 @@ pub enum DeletionResult {
     InvalidGeneration,
 }
 
-impl DeletionResult {
-    /// Determines whether the result was a valid deletion attempt,
-    /// i.e. the entry was deleted or did not exist.
-    ///
-    /// ## Returns
-    /// `false` if an invalid attempt was made at deleting a different generation.
-    pub fn is_valid(&self) -> bool {
-        !(*self == Self::InvalidGeneration)
-    }
-}
-
 /// A vector whose elements are addressed by both an index and an entry
 /// generation.
 impl<TEntry, TGeneration> GenerationalVector<TEntry, TGeneration>
 where
-    TGeneration: PrimInt,
+    TGeneration: One + Add<Output = TGeneration> + Copy + Debug + PartialEq,
 {
     /// Initializes a new, empty vector.
     pub fn new() -> Self {
         Self {
             data: Vec::new(),
-            free_head: 0,
+            free_list: Vec::new(),
             len: 0,
         }
     }
@@ -131,7 +66,7 @@ where
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             data: Vec::with_capacity(capacity),
-            free_head: 0,
+            free_list: Vec::new(),
             len: 0,
         }
     }
@@ -190,17 +125,7 @@ where
     /// ## Returns
     /// The number of empty slots.
     pub fn count_num_free(&self) -> usize {
-        let mut head = self.free_head;
-        let mut free_count = 0;
-        while let Some(GenerationalEntry { entry, .. }) = &self.data.get(head) {
-            if let Slot::Free { next_free } = entry {
-                free_count += 1;
-                head = *next_free;
-            } else {
-                break;
-            }
-        }
-        free_count
+        self.free_list.len()
     }
 
     /// Returns the number of elements the vector can hold without
@@ -232,9 +157,15 @@ where
     /// assert_eq!(v.len(), 2);
     /// ```
     pub fn push(&mut self, value: TEntry) -> GenerationalIndex<TGeneration> {
-        let index = match self.data.get_mut(self.free_head) {
-            None => self.insert_tail(value),
-            Some(entry) => entry.reuse(value, &mut self.free_head),
+        let index = match self.free_list.is_empty() {
+            true => self.insert_tail(value),
+            false => {
+                let free_index = self
+                    .free_list
+                    .pop()
+                    .expect("expected free_list to contain values");
+                self.data[free_index].reuse(value, free_index)
+            }
         };
 
         self.len += 1;
@@ -243,11 +174,10 @@ where
 
     /// Inserts at the end of the vector.
     fn insert_tail(&mut self, value: TEntry) -> GenerationalIndex<TGeneration> {
-        let generation = TGeneration::zero();
+        let generation = TGeneration::one();
         let index = GenerationalIndex::new(self.data.len(), generation);
         let gen_entry = GenerationalEntry::new_from_value(value, generation);
         self.data.push(gen_entry);
-        self.free_head = index.index + 1;
         index
     }
 
@@ -291,7 +221,7 @@ where
         }
 
         let entry = entry.unwrap();
-        if let Slot::Occupied(value) = &entry.entry {
+        if let Some(value) = &entry.entry {
             if entry.generation == index.generation {
                 return Some(value);
             }
@@ -325,16 +255,14 @@ where
         let GenerationalEntry { entry, generation } = &mut self.data[index.index];
 
         return match entry {
-            Slot::Occupied { .. } => {
+            Some { .. } => {
                 if *generation != index.generation {
                     return DeletionResult::InvalidGeneration;
                 }
 
+                *entry = None;
                 *generation = generation.add(TGeneration::one());
-                *entry = Slot::Free {
-                    next_free: self.free_head,
-                };
-                self.free_head = index.index;
+                self.free_list.push(index.index);
                 self.len -= 1;
                 DeletionResult::Ok
             }
@@ -343,9 +271,68 @@ where
     }
 }
 
+impl<TEntry> Default for GenerationalVector<TEntry, DefaultGenerationType> {
+    fn default() -> Self {
+        GenerationalVector::<TEntry, DefaultGenerationType>::new()
+    }
+}
+
+impl<TGeneration> GenerationalIndex<TGeneration> {
+    fn new(index: usize, generation: TGeneration) -> Self {
+        Self { index, generation }
+    }
+}
+
+impl DeletionResult {
+    /// Determines whether the result was a valid deletion attempt,
+    /// i.e. the entry was deleted or did not exist.
+    ///
+    /// ## Returns
+    /// `false` if an invalid attempt was made at deleting a different generation.
+    pub fn is_valid(&self) -> bool {
+        !(*self == Self::InvalidGeneration)
+    }
+}
+
+impl<TEntry, TGeneration> GenerationalEntry<TEntry, TGeneration>
+where
+    TGeneration: One + Copy + Add<Output = TGeneration>,
+{
+    #[inline]
+    fn new_from_value(value: TEntry, generation: TGeneration) -> Self {
+        Self {
+            entry: Some(value),
+            generation,
+        }
+    }
+
+    /// Replaces the content of an empty slot with a new value.
+    ///
+    /// ## Panics
+    /// Will panic if the slot is already occupied.
+    ///
+    /// ## Arguments
+    /// * `value` - The new value.
+    /// * `free_head` - A mutable reference to the free head pointer of the vector.
+    ///   This value will be overwritten.
+    ///
+    /// ## Returns
+    /// The index pointing to the new element.
+    pub fn reuse(&mut self, value: TEntry, vec_index: usize) -> GenerationalIndex<TGeneration> {
+        if self.entry.is_none() {
+            let key = GenerationalIndex::new(vec_index, self.generation);
+            self.entry = Some(value);
+            return key;
+        }
+
+        panic!("free list is corrupted");
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::num::{NonZeroU8, NonZeroUsize};
 
     #[test]
     fn default() {
@@ -444,7 +431,7 @@ mod test {
         // The index of element "a" was re-assigned to "e",
         // however the generation was incremented twice.
         assert_eq!(a.index, e.index);
-        assert_eq!(a.generation + 2, e.generation);
+        assert!(a.generation < e.generation);
         assert_ne!(a, e);
     }
 
@@ -464,7 +451,8 @@ mod test {
         assert!(gv.is_empty());
 
         // The free head now points at the last element.
-        assert_eq!(gv.free_head, 2);
+        assert_eq!(gv.free_list.len(), 3);
+        assert_eq!(*gv.free_list.last().unwrap(), 2);
 
         // Number of free elements is three, however
         // the internal list capacity is still higher.
@@ -488,7 +476,8 @@ mod test {
         assert!(gv.is_empty());
 
         // The free head now points at the first element.
-        assert_eq!(gv.free_head, 0);
+        assert_eq!(gv.free_list.len(), 3);
+        assert_eq!(*gv.free_list.last().unwrap(), 0);
 
         // Number of free elements is three, however
         // the internal list capacity is still higher.
@@ -518,5 +507,22 @@ mod test {
         assert!(!gv.is_empty());
 
         assert_eq!(gv.count_num_free(), 1);
+    }
+
+    #[test]
+    fn sizeof() {
+        assert_eq!(std::mem::size_of::<GenerationalEntry<u8, usize>>(), 16);
+        assert_eq!(std::mem::size_of::<GenerationalEntry<u8, u32>>(), 8);
+        assert_eq!(std::mem::size_of::<GenerationalEntry<u8, u16>>(), 4);
+        assert_eq!(std::mem::size_of::<GenerationalEntry<u8, u8>>(), 3);
+
+        assert_eq!(
+            std::mem::size_of::<GenerationalEntry<NonZeroU8, NonZeroUsize>>(),
+            16
+        );
+        assert_eq!(
+            std::mem::size_of::<GenerationalEntry<NonZeroU8, NonZeroU8>>(),
+            2
+        );
     }
 }
