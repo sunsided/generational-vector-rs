@@ -1,7 +1,10 @@
 # A generational indexing-based Vector
 
-This crates provides a vector type that uses generational indexes to access
-its elements. The vector is backed by a _free_ list to keep track of reusable holes
+This crates provides a vector type that uses generational indices to access
+its elements. The addition of a generation counter to an index allows for invalidation
+of stale references to previously deleted vector entries.
+
+The vector itself is backed by a _free_ list to keep track of reusable holes
 after element removal.
 
 ```rust
