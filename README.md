@@ -31,7 +31,19 @@ fn example() {
     // same address as c. It uses an older generation however,
     // so is considered "not found":
     assert_eq!(v.get(&b), None);
+
+    // Values can be enumerated.
+    // Note that the ordering depends on insertions and deletions.
+    for value in v {
+        println!("{}", value);
+    }
 }
+```
+
+The above script is taken from [examples/example.rs](examples/example.rs) and can be run using
+
+```shell
+cargo run --example example
 ```
 
 You can find more usage examples in [tests/tests.rs](tests/tests.rs). 
