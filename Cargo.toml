@@ -6,7 +6,7 @@ categories = ["memory-management", "rust-patterns", "game-development"]
 documentation = "https://docs.rs/crate/generational_vector/"
 repository = "https://github.com/sunsided/generational-vector-rs"
 license = "MIT"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Markus Mayer"]
 
