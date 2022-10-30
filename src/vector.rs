@@ -19,6 +19,7 @@ pub(crate) struct GenerationalEntry<TEntry, TGeneration> {
 }
 
 /// A vector that utilizes generational indexing to access the elements.
+#[derive(Debug)]
 pub struct GenerationalVector<TEntry, TGeneration = DefaultGenerationType>
 where
     TGeneration: GenerationType,
