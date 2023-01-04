@@ -18,6 +18,7 @@ pub struct GenerationalIndex<TGeneration> {
 pub(crate) struct GenerationalEntry<TEntry, TGeneration> {
     /// The generation of the entry. A value of zero always encodes an empty value.
     generation: TGeneration,
+    /// The data of this entry.
     pub(crate) entry: Option<TEntry>,
 }
 
