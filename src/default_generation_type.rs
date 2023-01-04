@@ -7,6 +7,7 @@ use std::ops::{Add, AddAssign, Deref, Mul};
 pub struct DefaultGenerationType(NonZeroUsize);
 
 impl Default for DefaultGenerationType {
+    #[inline(always)]
     fn default() -> Self {
         Self(unsafe { NonZeroUsize::new_unchecked(1) })
     }
@@ -15,7 +16,7 @@ impl Default for DefaultGenerationType {
 impl Deref for DefaultGenerationType {
     type Target = NonZeroUsize;
 
-    #[inline]
+    #[inline(always)]
     fn deref(&self) -> &Self::Target {
         &self.0
     }

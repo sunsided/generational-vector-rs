@@ -381,13 +381,15 @@ where
 }
 
 impl<TEntry> Default for GenerationalVector<TEntry, DefaultGenerationType> {
+    #[inline(always)]
     fn default() -> Self {
         GenerationalVector::<TEntry, DefaultGenerationType>::new()
     }
 }
 
 impl<TGeneration> GenerationalIndex<TGeneration> {
-    fn new(index: usize, generation: TGeneration) -> Self {
+    #[inline(always)]
+    const fn new(index: usize, generation: TGeneration) -> Self {
         Self { index, generation }
     }
 }
@@ -398,6 +400,7 @@ impl DeletionResult {
     ///
     /// ## Returns
     /// `false` if an invalid attempt was made at deleting a different generation.
+    #[inline(always)]
     pub fn is_valid(&self) -> bool {
         !(*self == Self::InvalidGeneration)
     }
@@ -407,8 +410,8 @@ impl<TEntry, TGeneration> GenerationalEntry<TEntry, TGeneration>
 where
     TGeneration: GenerationType,
 {
-    #[inline]
-    fn new_from_value(value: TEntry, generation: TGeneration) -> Self {
+    #[inline(always)]
+    const fn new_from_value(value: TEntry, generation: TGeneration) -> Self {
         Self {
             entry: Some(value),
             generation,
@@ -442,6 +445,7 @@ impl<TEntry, TGeneration> From<Vec<TEntry>> for GenerationalVector<TEntry, TGene
 where
     TGeneration: GenerationType,
 {
+    #[inline(always)]
     fn from(vec: Vec<TEntry>) -> Self {
         Self::new_from_vec(vec)
     }
