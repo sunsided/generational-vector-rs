@@ -40,8 +40,7 @@ where
     TGeneration: GenerationType,
 {
     data: Vec<GenerationalEntry<TEntry, TGeneration>>,
-    free_list: FreeList,
-    len: usize,
+    free_list: FreeList
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
@@ -76,7 +75,6 @@ where
         Self {
             data: Default::default(),
             free_list: FreeList::with_capacity(FREE_LIST_CAPACITY),
-            len: 0,
         }
     }
 
@@ -99,7 +97,6 @@ where
         Self {
             data,
             free_list: FreeList::with_capacity(FREE_LIST_CAPACITY),
-            len,
         }
     }
 
@@ -113,16 +110,15 @@ where
     /// assert_eq!(gv.len(), 3);
     /// ```
     pub fn new_from_iter<TIter: IntoIterator<Item = TEntry>>(vec: TIter) -> Self {
+        // TODO: Use from_iter
         let data: Vec<GenerationalEntry<TEntry, TGeneration>> = vec
             .into_iter()
             .map(|entry| GenerationalEntry::new_from_value(entry, TGeneration::one()))
             .collect();
-        let len = data.len();
 
         Self {
             data,
             free_list: FreeList::with_capacity(FREE_LIST_CAPACITY),
-            len,
         }
     }
 
@@ -137,7 +133,6 @@ where
         Self {
             data: Vec::with_capacity(capacity),
             free_list: FreeList::with_capacity(FREE_LIST_CAPACITY),
-            len: 0,
         }
     }
 
@@ -155,7 +150,7 @@ where
     /// ```
     #[inline]
     pub fn len(&self) -> usize {
-        self.len
+        self.data.len() - self.free_list.len()
     }
 
     /// Returns `true` if the vector contains no elements.
@@ -171,7 +166,7 @@ where
     /// ```
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.len == 0
+        self.len() == 0
     }
 
     /// Walks the list to determine the number of free elements.
@@ -234,7 +229,6 @@ where
             }
         };
 
-        self.len += 1;
         index
     }
 
@@ -329,7 +323,6 @@ where
                 *entry = None;
                 *generation = generation.add(TGeneration::one());
                 self.free_list.push(index.index);
-                self.len -= 1;
                 DeletionResult::Ok
             }
             _ => DeletionResult::NotFound,
@@ -502,9 +495,13 @@ mod test {
         let a = gv.push("a");
         let _ = gv.push("b");
         let _ = gv.push("c");
+        assert_eq!(gv.len(), 3);
 
         gv.remove(&a);
+        assert_eq!(gv.len(), 2);
+
         let d = gv.push("d");
+        assert_eq!(gv.len(), 3);
 
         // The index of element "a" was re-assigned to "d",
         // however the generation differs.
@@ -520,6 +517,7 @@ mod test {
         let a = gv.push("a");
         let b = gv.push("b");
         let c = gv.push("c");
+        assert_eq!(gv.len(), 3);
 
         gv.remove(&a);
         gv.remove(&b);
@@ -570,6 +568,7 @@ mod test {
 
         let d = gv.push("d");
         let e = gv.push("e");
+        assert_eq!(gv.len(), 2);
 
         // The last deleted element is assigned first.
         assert_eq!(c.index, d.index);
