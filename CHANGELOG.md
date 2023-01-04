@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- Added support for [smallvec](https://crates.io/crates/smallvec) via the `smallvec` feature.
+- Added support for [tinyvec](https://crates.io/crates/tinyvec) via the `tinyvec` feature.
+
 ## 0.2.1 - 2022-10-30
 
 ### Added

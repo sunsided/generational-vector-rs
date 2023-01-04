@@ -1,3 +1,6 @@
+#[cfg(all(feature = "tinyvec", feature = "smallvec"))]
+compile_error!("Feature \"tinyvec\" and \"smallvec\" cannot be enabled at the same time");
+
 use crate::iterators::{EntryIntoIterator, EntryIterator, EntryMutIterator};
 use crate::{DefaultGenerationType, GenerationType};
 use std::borrow::Borrow;
@@ -18,6 +21,17 @@ pub(crate) struct GenerationalEntry<TEntry, TGeneration> {
     pub(crate) entry: Option<TEntry>,
 }
 
+const FREE_LIST_CAPACITY: usize = 16;
+
+#[cfg(not(any(feature = "smallvec", feature = "tinyvec")))]
+type FreeList = Vec<usize>;
+
+#[cfg(feature = "smallvec")]
+type FreeList = smallvec::SmallVec<[usize; FREE_LIST_CAPACITY]>;
+
+#[cfg(feature = "tinyvec")]
+type FreeList = tinyvec::TinyVec<[usize; FREE_LIST_CAPACITY]>;
+
 /// A vector that utilizes generational indexing to access the elements.
 #[derive(Debug)]
 pub struct GenerationalVector<TEntry, TGeneration = DefaultGenerationType>
@@ -25,7 +39,7 @@ where
     TGeneration: GenerationType,
 {
     data: Vec<GenerationalEntry<TEntry, TGeneration>>,
-    free_list: Vec<usize>,
+    free_list: FreeList,
     len: usize,
 }
 
@@ -59,8 +73,8 @@ where
     /// ```
     pub fn new() -> Self {
         Self {
-            data: Vec::new(),
-            free_list: Vec::new(),
+            data: Default::default(),
+            free_list: FreeList::with_capacity(FREE_LIST_CAPACITY),
             len: 0,
         }
     }
@@ -83,7 +97,7 @@ where
 
         Self {
             data,
-            free_list: Vec::new(),
+            free_list: FreeList::with_capacity(FREE_LIST_CAPACITY),
             len,
         }
     }
@@ -106,7 +120,7 @@ where
 
         Self {
             data,
-            free_list: Vec::new(),
+            free_list: FreeList::with_capacity(FREE_LIST_CAPACITY),
             len,
         }
     }
@@ -121,7 +135,7 @@ where
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             data: Vec::with_capacity(capacity),
-            free_list: Vec::new(),
+            free_list: FreeList::with_capacity(FREE_LIST_CAPACITY),
             len: 0,
         }
     }
