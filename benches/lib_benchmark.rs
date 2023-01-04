@@ -1,6 +1,7 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
 use generational_vector::{vector, GenerationalVector};
 use std::num::NonZeroUsize;
+use generational_vector::vector::GenerationalIndex;
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("vec: push", |b| {
@@ -26,6 +27,32 @@ fn criterion_benchmark(c: &mut Criterion) {
         let value = NonZeroUsize::new(42).unwrap();
         b.iter(|| vec.push(black_box(value)));
     });
+
+    let mut group = c.benchmark_group("gv: remove/push");
+    for size in [1, 2, 15, 16, 128].iter() {
+        let mut vec = GenerationalVector::default();
+        let value = 42usize;
+
+        let mut idxs = Vec::default();
+        for _ in 0..1000 {
+            idxs.push(vec.push(value));
+        }
+
+        group.throughput(Throughput::Elements(*size as _));
+        group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
+            b.iter(|| {
+                for _ in 0..size {
+                    let idx = idxs.pop().unwrap();
+                    vec.remove(&idx);
+                }
+
+                for _ in 0..size {
+                    idxs.push(vec.push(black_box(value)));
+                }
+            });
+        });
+    }
+    group.finish();
 }
 
 criterion_group!(benches, criterion_benchmark);
