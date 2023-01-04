@@ -110,14 +110,10 @@ where
     /// assert_eq!(gv.len(), 3);
     /// ```
     pub fn new_from_iter<TIter: IntoIterator<Item = TEntry>>(vec: TIter) -> Self {
-        // TODO: Use from_iter
-        let data: Vec<GenerationalEntry<TEntry, TGeneration>> = vec
-            .into_iter()
-            .map(|entry| GenerationalEntry::new_from_value(entry, TGeneration::one()))
-            .collect();
-
         Self {
-            data,
+            data: Vec::from_iter(vec
+                .into_iter()
+                .map(|entry| GenerationalEntry::new_from_value(entry, TGeneration::one()))),
             free_list: FreeList::with_capacity(FREE_LIST_CAPACITY),
         }
     }
