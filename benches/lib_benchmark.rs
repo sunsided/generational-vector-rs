@@ -1,7 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
 use generational_vector::{vector, GenerationalVector};
 use std::num::NonZeroUsize;
-use generational_vector::vector::GenerationalIndex;
 
 fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("vec: push", |b| {

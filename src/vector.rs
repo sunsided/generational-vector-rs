@@ -402,7 +402,7 @@ impl DeletionResult {
     /// `false` if an invalid attempt was made at deleting a different generation.
     #[inline(always)]
     pub fn is_valid(&self) -> bool {
-        !(*self == Self::InvalidGeneration)
+        *self != Self::InvalidGeneration
     }
 }
 
@@ -430,14 +430,11 @@ where
     ///
     /// ## Returns
     /// The index pointing to the new element.
+    #[inline(always)]
     pub fn reuse(&mut self, value: TEntry, vec_index: usize) -> GenerationalIndex<TGeneration> {
-        if self.entry.is_none() {
-            let key = GenerationalIndex::new(vec_index, self.generation);
-            self.entry = Some(value);
-            return key;
-        }
-
-        panic!("free list is corrupted");
+        debug_assert!(self.entry.is_none(), "free list is corrupted");
+        self.entry = Some(value);
+        GenerationalIndex::new(vec_index, self.generation)
     }
 }
 
