@@ -227,13 +227,9 @@ where
     /// assert_eq!(v.len(), 2);
     /// ```
     pub fn push(&mut self, value: TEntry) -> GenerationalIndex<TGeneration> {
-        let index = match self.free_list.is_empty() {
-            true => self.insert_tail(value),
-            false => {
-                let free_index = self
-                    .free_list
-                    .pop()
-                    .expect("expected free_list to contain values");
+        let index = match self.free_list.pop() {
+            None => self.insert_tail(value),
+            Some(free_index) => {
                 self.data[free_index].reuse(value, free_index)
             }
         };
