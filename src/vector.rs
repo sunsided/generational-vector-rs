@@ -218,17 +218,16 @@ where
     /// assert_eq!(v.len(), 2);
     /// ```
     pub fn push(&mut self, value: TEntry) -> GenerationalIndex<TGeneration> {
-        let index = match self.free_list.pop() {
+        match self.free_list.pop() {
             None => self.insert_tail(value),
             Some(free_index) => {
                 self.data[free_index].reuse(value, free_index)
             }
-        };
-
-        index
+        }
     }
 
     /// Inserts at the end of the vector.
+    #[inline(always)]
     fn insert_tail(&mut self, value: TEntry) -> GenerationalIndex<TGeneration> {
         let generation = TGeneration::one();
         let index = GenerationalIndex::new(self.data.len(), generation);
