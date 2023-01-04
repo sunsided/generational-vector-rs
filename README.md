@@ -48,6 +48,11 @@ cargo run --example example
 
 You can find more usage examples in [tests/tests.rs](tests/tests.rs). 
 
+## Crate features
+
+- `smallvec`: Enables the use of `SmallVec<T>` for the free list.
+- `tinyvec`: Enables the use of `TinyVec<T>` for the free list.
+
 ## Benchmarks
 
 This project uses Criterion for benchmarking. To execute the benchmarks, run

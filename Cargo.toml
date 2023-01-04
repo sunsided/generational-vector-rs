@@ -1,17 +1,19 @@
 [package]
 name = "generational_vector"
+version = "0.3.0"
 description = "A vector type using generational indices"
 keywords = ["collections", "vector", "generational-index", "gamedev"]
 categories = ["memory-management", "rust-patterns", "game-development"]
 documentation = "https://docs.rs/crate/generational_vector/"
 repository = "https://github.com/sunsided/generational-vector-rs"
 license = "MIT"
-version = "0.2.1"
 edition = "2021"
 authors = ["Markus Mayer"]
 
 [features]
+# Enables the use of `SmallVec<T>` for the free list.
 smallvec = ["dep:smallvec"]
+# Enables the use of `TinyVec<T>` for the free list.
 tinyvec = ["dep:tinyvec"]
 
 [dependencies]
