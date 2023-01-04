@@ -22,6 +22,22 @@ pub(crate) struct GenerationalEntry<TEntry, TGeneration> {
     pub(crate) entry: Option<TEntry>,
 }
 
+impl<TEntry, TGeneration> GenerationalEntry<TEntry, TGeneration>
+where
+    TGeneration: GenerationType,
+{
+    #[inline(always)]
+    fn is_same_gen(&self, index: &GenerationalIndex<TGeneration>) -> bool {
+        self.generation == index.generation
+    }
+
+    #[inline(always)]
+    fn reset_and_evolve(&mut self) {
+        self.entry = None;
+        self.generation = self.generation.add(TGeneration::one())
+    }
+}
+
 const FREE_LIST_CAPACITY: usize = 16;
 
 #[cfg(not(any(feature = "smallvec", feature = "tinyvec")))]
@@ -40,7 +56,7 @@ where
     TGeneration: GenerationType,
 {
     data: Vec<GenerationalEntry<TEntry, TGeneration>>,
-    free_list: FreeList
+    free_list: FreeList,
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd)]
@@ -111,9 +127,10 @@ where
     /// ```
     pub fn new_from_iter<TIter: IntoIterator<Item = TEntry>>(vec: TIter) -> Self {
         Self {
-            data: Vec::from_iter(vec
-                .into_iter()
-                .map(|entry| GenerationalEntry::new_from_value(entry, TGeneration::one()))),
+            data: Vec::from_iter(
+                vec.into_iter()
+                    .map(|entry| GenerationalEntry::new_from_value(entry, TGeneration::one())),
+            ),
             free_list: FreeList::with_capacity(FREE_LIST_CAPACITY),
         }
     }
@@ -176,8 +193,8 @@ where
     /// let _b = v.push("b");
     /// let _c = v.push("c");
     ///
-    /// v.remove(&_a);
-    /// v.remove(&_b);
+    /// v.remove(_a);
+    /// v.remove(_b);
     ///
     /// assert_eq!(v.len(), 1);
     /// assert_eq!(v.count_num_free(), 2);
@@ -220,9 +237,7 @@ where
     pub fn push(&mut self, value: TEntry) -> GenerationalIndex<TGeneration> {
         match self.free_list.pop() {
             None => self.insert_tail(value),
-            Some(free_index) => {
-                self.data[free_index].reuse(value, free_index)
-            }
+            Some(free_index) => self.data[free_index].reuse(value, free_index),
         }
     }
 
@@ -256,7 +271,7 @@ where
     /// assert_eq!(v.get(&a).unwrap(), &"a");
     /// assert_eq!(v.get(&b).unwrap(), &"b");
     ///
-    /// v.remove(&b);
+    /// v.remove(b);
     /// assert_eq!(v.get(&b), None);
     ///
     /// let c = v.push("c");
@@ -270,19 +285,16 @@ where
         let index = index.borrow();
 
         // Apply boundary check for the index.
-        let entry = self.data.get(index.index);
-        if entry.is_none() {
-            return None;
-        }
-
-        let entry = entry.unwrap();
-        if let Some(value) = &entry.entry {
-            if entry.generation == index.generation {
-                return Some(value);
+        match self.data.get(index.index) {
+            None => None,
+            Some(entry) => {
+                if entry.is_same_gen(&index) {
+                    entry.entry.as_ref()
+                } else {
+                    None
+                }
             }
         }
-
-        None
     }
 
     /// Removes an element from the vector.
@@ -297,31 +309,34 @@ where
     /// let a = v.push("a");
     /// let b = v.push("b");
     ///
-    /// assert_eq!(v.remove(&a), DeletionResult::Ok);
-    /// assert_eq!(v.remove(&b), DeletionResult::Ok);
-    /// assert_eq!(v.remove(&b), DeletionResult::NotFound);
+    /// assert_eq!(v.remove(a), DeletionResult::Ok);
+    /// assert_eq!(v.remove(b), DeletionResult::Ok);
+    /// assert_eq!(v.remove(b), DeletionResult::NotFound);
     /// assert_eq!(v.len(), 0);
     ///
     /// let c = v.push("c");
-    /// assert_eq!(v.remove(&b), DeletionResult::InvalidGeneration);
+    /// assert_eq!(v.remove(b), DeletionResult::InvalidGeneration);
     /// assert_eq!(v.len(), 1);
     /// ```
-    pub fn remove(&mut self, index: &GenerationalIndex<TGeneration>) -> DeletionResult {
-        let GenerationalEntry { entry, generation } = &mut self.data[index.index];
+    pub fn remove<T>(&mut self, index: T) -> DeletionResult
+    where
+        T: Borrow<GenerationalIndex<TGeneration>>,
+    {
+        let index = index.borrow();
+        let ge = &mut self.data[index.index];
 
-        return match entry {
+        match ge.entry {
             Some { .. } => {
-                if *generation != index.generation {
+                if !ge.is_same_gen(&index) {
                     return DeletionResult::InvalidGeneration;
                 }
 
-                *entry = None;
-                *generation = generation.add(TGeneration::one());
+                ge.reset_and_evolve();
                 self.free_list.push(index.index);
                 DeletionResult::Ok
             }
             _ => DeletionResult::NotFound,
-        };
+        }
     }
 
     /// Produces an immutable enumerator.
@@ -492,7 +507,7 @@ mod test {
         let _ = gv.push("c");
         assert_eq!(gv.len(), 3);
 
-        gv.remove(&a);
+        gv.remove(a);
         assert_eq!(gv.len(), 2);
 
         let d = gv.push("d");
@@ -514,9 +529,9 @@ mod test {
         let c = gv.push("c");
         assert_eq!(gv.len(), 3);
 
-        gv.remove(&a);
-        gv.remove(&b);
-        gv.remove(&c);
+        gv.remove(a);
+        gv.remove(b);
+        gv.remove(c);
 
         assert_eq!(gv.len(), 0);
         assert!(gv.is_empty());
@@ -536,9 +551,9 @@ mod test {
         let b = gv.push("b");
         let c = gv.push("c");
 
-        gv.remove(&c);
-        gv.remove(&b);
-        gv.remove(&a);
+        gv.remove(c);
+        gv.remove(b);
+        gv.remove(a);
 
         assert_eq!(gv.len(), 0);
         assert!(gv.is_empty());
@@ -557,9 +572,9 @@ mod test {
         let b = gv.push("b");
         let c = gv.push("c");
 
-        gv.remove(&a);
-        gv.remove(&b);
-        gv.remove(&c);
+        gv.remove(a);
+        gv.remove(b);
+        gv.remove(c);
 
         let d = gv.push("d");
         let e = gv.push("e");

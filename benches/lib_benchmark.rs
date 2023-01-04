@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId, Throughput};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use generational_vector::{vector, GenerationalVector};
 use std::num::NonZeroUsize;
 
@@ -42,7 +42,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             b.iter(|| {
                 for _ in 0..size {
                     let idx = idxs.pop().unwrap();
-                    vec.remove(&idx);
+                    vec.remove(idx);
                 }
 
                 for _ in 0..size {

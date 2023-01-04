@@ -15,6 +15,7 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Some frequently used functions were marked as `const` and `inline(always)`.
 - The internal `len` property of the vector was removed and the length is now dynamically calculated
   from the data and free lists.
+- The `remove` function now uses `Borrow<GenerationalIndex>` to feel a bit more natural.
 
 ## 0.2.1 - 2022-10-30
 
